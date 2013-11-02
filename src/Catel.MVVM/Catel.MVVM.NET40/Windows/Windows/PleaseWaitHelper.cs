@@ -19,6 +19,7 @@ namespace Catel.Windows
     /// <summary>
     /// PleaseWait window Helper class.
     /// </summary>
+    [ObsoleteEx(Message = "No longer recommended", Replacement = "PleaseWaitService implementation", TreatAsErrorFromVersion = "3.8", RemoveInVersion = "4.0")]
     public class PleaseWaitHelper
     {
         #region Constants
@@ -216,7 +217,7 @@ namespace Catel.Windows
 
                 UpdateStatus(string.Format(statusFormat, currentItem, totalItems));
 
-                int percentage = (100/totalItems)*currentItem;
+                int percentage = (100 / totalItems) * currentItem;
 
                 Instance.ShowWindow(percentage);
             });
@@ -249,7 +250,7 @@ namespace Catel.Windows
             {
                 PleaseWaitWindow.Text = _currentStatusText;
                 PleaseWaitWindow.MinWidth = double.IsNaN(_currentWindowWidth) ? 0d : _currentWindowWidth;
-                PleaseWaitWindow.UpdateLayout();                
+                PleaseWaitWindow.UpdateLayout();
             });
         }
 

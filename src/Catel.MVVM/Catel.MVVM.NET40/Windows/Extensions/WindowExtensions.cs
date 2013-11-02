@@ -11,6 +11,7 @@ namespace Catel.Windows
     using System.Runtime.InteropServices;
     using System.Windows;
     using System.Windows.Interop;
+    using System.Windows.Threading;
     using Catel.Reflection;
     using Catel.Windows.Threading;
     using Logging;
@@ -223,6 +224,58 @@ namespace Catel.Windows
             SetOwnerWindow(window, null, owner, forceNewOwner, focusFirstControl);
         }
         #endregion
+
+        /// <summary>
+        /// Centers the window in the active window.
+        /// </summary>
+        /// <param name="window">The window.</param>
+        /// <exception cref="ArgumentNullException">The <paramref name="window"/> is <c>null</c>.</exception>
+        public static void CenterInActiveWindow(this Window window)
+        {
+            Argument.IsNotNull("window", window);
+
+            var workArea = SystemParameters.WorkArea;
+            var x = (workArea.Width - window.Width) / 2 + workArea.Left;
+            var y = (workArea.Height - window.Height) / 2 + workArea.Top;
+
+            var windowDispatcher = window.Dispatcher;
+            var windowWidth = 0d; 
+            var windowHeight = 0d;
+
+            windowDispatcher.Invoke(() => windowWidth = (window.ActualWidth != 0d) ? window.ActualWidth : window.Width);
+            windowDispatcher.Invoke(() => windowHeight = (window.ActualHeight != 0d) ? window.ActualHeight : window.Height);
+
+            var applicationDispatcher = Application.Current.Dispatcher;
+            applicationDispatcher.BeginInvoke(() =>
+            {
+                var activeWindow = Application.Current.GetActiveWindow();
+                if (activeWindow == null)
+                {
+                    activeWindow = Application.Current.MainWindow;
+                    //applicationDispatcher.Invoke(() =>
+                    //{
+                    //    activeWindow = Application.Current.MainWindow;
+                    //});
+                }
+
+                if (activeWindow != null)
+                {
+                    var activeWindowDispatcher = activeWindow.Dispatcher;
+
+                    activeWindowDispatcher.Invoke(() =>
+                    {
+                        x = (activeWindow.Left + (activeWindow.ActualWidth / 2)) - (windowWidth / 2);
+                        y = (activeWindow.Top + (activeWindow.ActualHeight / 2)) - (windowHeight / 2);
+                    });
+                }
+
+                window.Dispatcher.BeginInvoke(() =>
+                {
+                    window.Left = x;
+                    window.Top = y;
+                });
+            });
+        }
 
         /// <summary>
         /// Brings to specified window to top.

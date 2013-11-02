@@ -38,6 +38,8 @@ Added/fixed:
 (+) CTL-205 Added Async methods on IExceptionService
 (+) CTL-208 Added support for Entity Framework 6 in a new extension (Catel.Extensions.EntityFramework6)
 (+) CTL-219 Implemented BackEntry methods for Windows Phone 8 on the NavigationService
+(*) CTL-114 / CTL-206 PleaseWaitWindow in WPF is now fully handled on a separate thread. This allows users to update the status
+    in a for-loop without having to use a background thread. It also makes the PleaseWaitHelper obsolete.
 (*) CTL-125 TypeFactory selects wrong constructor when there is more than 1 option. It now tries parameters which 
     accept Object or DynamicObject the latest. Also introduced the InjectionConstructorAttribute so the right constructor
     can be decorated so it is always selected first by Catel

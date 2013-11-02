@@ -4,10 +4,18 @@
 // </copyright>
 // --------------------------------------------------------------------------------------------------------------------
 
+
 namespace Catel.MVVM.Services
 {
     using System;
+    using System.Diagnostics;
+    using System.Threading;
+    using System.Windows;
+    using System.Windows.Threading;
+    using Catel.Logging;
+    using Catel.MVVM.Properties;
     using Catel.Windows;
+    using Catel.Windows.Threading;
 
     /// <summary>
     /// Please wait service to show a please wait window during background activities. This service uses the <see cref="PleaseWaitWindow"/>
@@ -15,20 +23,60 @@ namespace Catel.MVVM.Services
     /// </summary>
     public class PleaseWaitService : IPleaseWaitService
     {
+        /// <summary>
+        /// The log.
+        /// </summary>
+        private static readonly ILog Log = LogManager.GetCurrentClassLogger();
+
         #region Fields
+        private Thread _windowThread;
+        private PleaseWaitWindow _pleaseWaitWindow;
         private int _showCounter;
+        #endregion
+
+        #region Constructors
+        /// <summary>
+        /// Initializes a new instance of the <see cref="PleaseWaitService"/> class.
+        /// </summary>
+        public PleaseWaitService()
+        {
+            _windowThread = new Thread(() =>
+            {
+                _pleaseWaitWindow = CreatePleaseWaitWindow();
+
+                // Run dispatcher to keep the separate thread alive
+                Dispatcher.Run();
+
+                Log.Warning("PleaseWaitService thread has been ended, this should only happen at application shutdown");
+            });
+
+            _windowThread.Name = "PleaseWaitWindowThread";
+            _windowThread.SetApartmentState(ApartmentState.STA);
+            _windowThread.IsBackground = true;
+
+            _windowThread.Start();
+        }
+        #endregion
+
+        #region Properties
+        /// <summary>
+        /// Gets the dispatcher of the please wait window.
+        /// </summary>
+        /// <value>The dispatcher.</value>
+        protected Dispatcher Dispatcher { get { return _pleaseWaitWindow.Dispatcher; } }
         #endregion
 
         #region IPleaseWaitService Members
         /// <summary>
         /// Shows the please wait window with the specified status text.
         /// </summary>
-        /// <param name="status">
-        /// The status. When the string is <c>null</c> or empty, the default please wait text will be used.
-        /// </param>
+        /// <param name="status">The status. When the string is <c>null</c> or empty, the default please wait text will be used.</param>
+        /// <remarks>When this method is used, the <see cref="Hide" /> method must be called to hide the window again.</remarks>
         public virtual void Show(string status = "")
         {
-            PleaseWaitHelper.Show(status);
+            UpdateStatus(status);
+
+            Show(-1);
         }
 
         /// <summary>
@@ -39,18 +87,25 @@ namespace Catel.MVVM.Services
         /// <param name="status">The status.</param>
         public virtual void Show(PleaseWaitWorkDelegate workDelegate, string status = "")
         {
-            PleaseWaitHelper.Show(workDelegate, null, status);
+            UpdateStatus(status);
+
+            Show(-1);
+
+            if (workDelegate != null)
+            {
+                workDelegate();
+            }
+
+            Hide();
         }
 
         /// <summary>
         /// Updates the status text.
         /// </summary>
-        /// <param name="status">
-        /// The status.
-        /// </param>
+        /// <param name="status">The status.</param>
         public virtual void UpdateStatus(string status)
         {
-            PleaseWaitHelper.UpdateStatus(status);
+            Dispatcher.BeginInvoke(() => _pleaseWaitWindow.Text = GetStatus(status));
         }
 
         /// <summary>
@@ -70,7 +125,16 @@ namespace Catel.MVVM.Services
         /// <exception cref="ArgumentNullException">The <paramref name="statusFormat" /> is <c>null</c>.</exception>
         public virtual void UpdateStatus(int currentItem, int totalItems, string statusFormat = "")
         {
-            PleaseWaitHelper.UpdateStatus(statusFormat, currentItem, totalItems);
+            if (currentItem > totalItems)
+            {
+                Hide();
+                return;
+            }
+
+            UpdateStatus(string.Format(statusFormat, currentItem, totalItems));
+
+            int percentage = (100 / totalItems) * currentItem;
+            Show(percentage);
         }
 
         /// <summary>
@@ -78,9 +142,17 @@ namespace Catel.MVVM.Services
         /// </summary>
         public virtual void Hide()
         {
-            PleaseWaitHelper.Hide();
+            Dispatcher.BeginInvoke(() =>
+            {
+                //_currentStatusText = GetStatus(string.Empty);
+                //_currentWindowWidth = 0d;
 
-            _showCounter = 0;
+                _pleaseWaitWindow.Visibility = Visibility.Hidden;
+                //_pleaseWaitWindow.Hide();
+                _pleaseWaitWindow.Text = GetStatus(string.Empty);
+
+                _showCounter = 0;
+            });
         }
 
         /// <summary>
@@ -130,5 +202,72 @@ namespace Catel.MVVM.Services
             }
         }
         #endregion
+
+        /// <summary>
+        /// Shows the window specified percentage.
+        /// </summary>
+        /// <param name="percentage">The percentage. If <c>-1</c>, the window is indeterminate.</param>
+        protected virtual void Show(int percentage)
+        {
+            bool isIndeterminate = (percentage == -1);
+
+            Dispatcher.BeginInvoke(() =>
+            {
+                _pleaseWaitWindow.IsIndeterminate = isIndeterminate;
+                _pleaseWaitWindow.Percentage = percentage;
+
+                //_pleaseWaitWindow.Text = _currentStatusText;
+                //_pleaseWaitWindow.MinWidth = double.IsNaN(_currentWindowWidth) ? 0d : _currentWindowWidth;
+
+                _pleaseWaitWindow.Visibility = Visibility.Visible;
+
+                // Yes, check for PleaseWaitWindow (property). Sometimes the show immediately hides
+                //while (!_pleaseWaitWindow.IsOwnerDimmed)
+                //{
+                //    // It's a bad practice to use this "equivalent" of DoEvents in WPF, but I don't see another choice
+                //    // to wait until the animation of the ShowWindow has finished without blocking the UI
+                //    _pleaseWaitWindow.Dispatcher.Invoke(DispatcherPriority.Background, (ThreadStart)delegate { });
+                //    _pleaseWaitWindow.UpdateLayout();
+                //}
+
+                //lock (_visibleStopwatchLock)
+                //{
+                //    if (_visibleStopwatch == null)
+                //    {
+                //        _visibleStopwatch = new Stopwatch();
+                //        _visibleStopwatch.Start();
+                //    }
+                //    else
+                //    {
+                //        _visibleStopwatch.Reset();
+                //        _visibleStopwatch.Start();
+                //    }
+                //}
+            });
+        }
+
+        /// <summary>
+        /// Gets the status.
+        /// </summary>
+        /// <param name="status">The status.</param>
+        /// <returns>System.String.</returns>
+        protected virtual string GetStatus(string status)
+        {
+            if (string.IsNullOrEmpty(status))
+            {
+                status = Resources.PleaseWait;
+            }
+
+            return status;
+        }
+
+        /// <summary>
+        /// Creates the please wait window.
+        /// </summary>
+        /// <returns>PleaseWaitWindow.</returns>
+        protected virtual PleaseWaitWindow CreatePleaseWaitWindow()
+        {
+            return new PleaseWaitWindow();
+        }
     }
 }

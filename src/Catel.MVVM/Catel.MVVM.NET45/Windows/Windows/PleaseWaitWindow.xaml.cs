@@ -14,6 +14,8 @@ namespace Catel.Windows
     using System.Windows.Controls;
     using System.Windows.Media;
     using System.Windows.Threading;
+    using Catel.Logging;
+    using Catel.Windows.Threading;
 
     /// <summary>
     /// The action that the <see cref="PleaseWaitWindow"/> should take when it becomes visible.
@@ -44,6 +46,8 @@ namespace Catel.Windows
     /// </remarks>
     public partial class PleaseWaitWindow
     {
+        private static readonly ILog Log = LogManager.GetCurrentClassLogger();
+
         #region Fields
         private static readonly AutoResetEvent _autoResetEvent = new AutoResetEvent(false);
 
@@ -188,13 +192,8 @@ namespace Catel.Windows
                 switch (Visibility)
                 {
                     case Visibility.Visible:
-                        if (Owner != null)
-                        {
-                            Left = (Owner.Left + (Owner.ActualWidth / 2)) - (ActualWidth / 2);
-                            Top = (Owner.Top + (Owner.ActualHeight / 2)) - (ActualHeight / 2);
-                        }
-
                         this.BringWindowToTop();
+                        this.CenterInActiveWindow();
 
                         ChangeMode(true);
                         break;
@@ -219,39 +218,42 @@ namespace Catel.Windows
         /// <param name="dimm">if set to <c>true</c>, all windows should be dimmed.</param>
         private void ChangeMode(bool dimm)
         {
-            if (!dimm)
-            {
-                ChangeMode(_dimmedElements, false);
-            }
-            else
-            {
-                var elements = new List<FrameworkElement>();
+            // Note: disabled this for now since the PleaseWaitWindow now fully runs on a separate thread
 
-                var currentApplication = Application.Current;
-                if (OnlyDimmOwnerWindow || currentApplication == null)
-                {
-                    if (Owner != null)
-                    {
-                        elements.Add(Owner);
-                    }
-                }
-                else
-                {
-                    elements.AddRange(currentApplication.Windows.Cast<FrameworkElement>().Where(window => !(window is PleaseWaitWindow)));
+            //if (!dimm)
+            //{
+            //    ChangeMode(_dimmedElements, false);
+            //}
+            //else
+            //{
+            //    var elements = new List<FrameworkElement>();
 
-                    if (!DoNotDimmPopups)
-                    {
-                        elements.AddRange((from popup in PopupHelper.GetAllPopups()
-                                           where popup.Child is FrameworkElement
-                                           select popup.Child).Cast<FrameworkElement>());
-                    }
-                }
+            //    var currentApplication = Application.Current;
+            //    if (OnlyDimmOwnerWindow || currentApplication == null)
+            //    {
+            //        if (Owner != null)
+            //        {
+            //            elements.Add(Owner);
+            //        }
+            //    }
+            //    else
+            //    {
+            //        var dispatcher = currentApplication.Dispatcher;
+            //        elements.AddRange(dispatcher.Invoke(() => currentApplication.Windows.Cast<FrameworkElement>().Where(window => !(window is PleaseWaitWindow))));
 
-                if (elements.Count > 0)
-                {
-                    ChangeMode(elements, true);
-                }
-            }
+            //        if (!DoNotDimmPopups)
+            //        {
+            //            elements.AddRange((from popup in PopupHelper.GetAllPopups()
+            //                               where popup.Child is FrameworkElement
+            //                               select popup.Child).Cast<FrameworkElement>());
+            //        }
+            //    }
+
+            //    if (elements.Count > 0)
+            //    {
+            //        ChangeMode(elements, true);
+            //    }
+            //}
         }
 
         /// <summary>
@@ -263,18 +265,25 @@ namespace Catel.Windows
         {
             if (!dimm)
             {
-                Action action = () => { UpdateLayout(); Close(); };
+                Action action = () => Dispatcher.Invoke(() =>
+                {
+                    UpdateLayout();
+                    Visibility = Visibility.Hidden;
+                });
 
                 foreach (var element in _dimmedElements)
                 {
+                    var safeElement = element;
+                    var dispatcher = safeElement.Dispatcher;
+
                     switch (Mode)
                     {
                         case PleaseWaitMode.Dimm:
-                            element.Undimm(action);
+                            dispatcher.Invoke(() => safeElement.Undimm(action));
                             break;
 
                         case PleaseWaitMode.Blur:
-                            element.Unblur(action);
+                            dispatcher.Invoke(() => safeElement.Unblur(action));
                             break;
 
                         case PleaseWaitMode.Nothing:
@@ -285,7 +294,7 @@ namespace Catel.Windows
                             throw new ArgumentOutOfRangeException();
                     }
 
-                    element.IsHitTestVisible = true;
+                    dispatcher.Invoke(() => safeElement.IsHitTestVisible = true);
                 }
 
                 _dimmedElements.Clear();
@@ -297,18 +306,21 @@ namespace Catel.Windows
             }
             else
             {
-                Action action = UpdateLayout;
+                Action action = () => Dispatcher.Invoke(UpdateLayout);
 
                 foreach (var element in elements)
                 {
+                    var safeElement = element;
+                    var dispatcher = safeElement.Dispatcher;
+
                     switch (Mode)
                     {
                         case PleaseWaitMode.Dimm:
-                            element.Dimm(action);
+                            dispatcher.Invoke(() => safeElement.Dimm(action));
                             break;
 
                         case PleaseWaitMode.Blur:
-                            element.Blur(action);
+                            dispatcher.Invoke(() => safeElement.Blur(action));
                             break;
 
                         case PleaseWaitMode.Nothing:
@@ -319,7 +331,7 @@ namespace Catel.Windows
                             throw new ArgumentOutOfRangeException();
                     }
 
-                    element.IsHitTestVisible = false;
+                    dispatcher.Invoke(() => safeElement.IsHitTestVisible = false);
 
                     if (!_dimmedElements.Contains(element))
                     {
@@ -341,6 +353,8 @@ namespace Catel.Windows
         /// <param name="e">The <see cref="System.Windows.RoutedEventArgs"/> instance containing the event data.</param>
         private void OnLoaded(object sender, RoutedEventArgs e)
         {
+            Dispatcher.BeginInvoke(DispatcherPriority.Render, (Action)(() => this.CenterInActiveWindow()));
+
             var hostVisuals = CreateMediaElementsOnWorkerThread();
 
             indeterminateVisualWrapper.Child = hostVisuals[0];
@@ -356,7 +370,7 @@ namespace Catel.Windows
         {
             if (Owner != null)
             {
-                Owner.UpdateLayout();
+                Owner.Dispatcher.Invoke(() => Owner.UpdateLayout());
             }
         }
 
@@ -381,14 +395,20 @@ namespace Catel.Windows
             {
                 foreach (var window in _dimmedElements)
                 {
-                    window.IsHitTestVisible = true;
-                    window.Opacity = 1d;
+                    var safeWindow = window;
+                    var dispatcher = safeWindow.Dispatcher;
+
+                    dispatcher.Invoke(() =>
+                    {
+                        safeWindow.IsHitTestVisible = true;
+                        safeWindow.Opacity = 1d;
+                    });
                 }
             }
 
             if (Owner != null)
             {
-                Owner.Focus();
+                Owner.Dispatcher.Invoke(() => Owner.Focus());
             }
 
             base.OnClosed(e);
@@ -428,9 +448,12 @@ namespace Catel.Windows
                 determinateSource.RootVisual = CreateDeterminateElement();
 
                 Dispatcher.Run();
+
+                Log.Warning("PleaseWaitService thread has been ended, this should only happen at window closing");
             }
-            catch
+            catch (Exception ex)
             {
+                Log.Error(ex, "WorkerThread for BusyIndicator crashed");
             }
         }
 

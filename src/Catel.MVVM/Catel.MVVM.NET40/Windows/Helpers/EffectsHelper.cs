@@ -8,6 +8,7 @@ namespace Catel.Windows
 {
     using System;
     using System.Windows;
+    using Catel.Windows.Threading;
 
 #if NETFX_CORE
     using global::Windows.UI.Xaml;
@@ -61,9 +62,12 @@ namespace Catel.Windows
         {
             Argument.IsNotNull("frameworkElement", frameworkElement);
 
-            frameworkElement.IsHitTestVisible = false;
+            frameworkElement.Dispatcher.Invoke(() =>
+            {
+                frameworkElement.IsHitTestVisible = false;
 
-            RunStoryboardWithCallback(frameworkElement, _dimmStoryboard, completedDelegate);
+                RunStoryboardWithCallback(frameworkElement, _dimmStoryboard, completedDelegate);
+            });
         }
 
         /// <summary>
@@ -76,9 +80,12 @@ namespace Catel.Windows
         {
             Argument.IsNotNull("frameworkElement", frameworkElement);
 
-            frameworkElement.IsHitTestVisible = true;
+            frameworkElement.Dispatcher.Invoke(() =>
+            {
+                frameworkElement.IsHitTestVisible = true;
 
-            RunStoryboardWithCallback(frameworkElement, _undimmStoryboard, completedDelegate);
+                RunStoryboardWithCallback(frameworkElement, _undimmStoryboard, completedDelegate);
+            });
         }
 
 #if NET || SL4 || SL5
@@ -95,9 +102,12 @@ namespace Catel.Windows
             var blur = new BlurEffect();
             blur.Radius = 5;
 
-            frameworkElement.Effect = blur;
+            frameworkElement.Dispatcher.Invoke(() =>
+            {
+                frameworkElement.Effect = blur;
 
-            Dimm(frameworkElement, completedDelegate);
+                Dimm(frameworkElement, completedDelegate);
+            });
         }
 
         /// <summary>
@@ -110,9 +120,12 @@ namespace Catel.Windows
         {
             Argument.IsNotNull("frameworkElement", frameworkElement);
 
-            frameworkElement.Effect = null;
+            frameworkElement.Dispatcher.Invoke(() =>
+            {
+                frameworkElement.Effect = null;
 
-            Undimm(frameworkElement, completedDelegate);
+                Undimm(frameworkElement, completedDelegate);
+            });
         }
 #endif
 
