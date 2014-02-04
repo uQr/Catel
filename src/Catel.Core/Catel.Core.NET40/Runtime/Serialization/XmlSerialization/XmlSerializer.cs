@@ -440,9 +440,18 @@ namespace Catel.Runtime.Serialization.Xml
 
             var propertyTypeToDeserialize = memberValue.Type;
 
+            // Note: keep here for backwards compatibility
             var isNullAttribute = element.Attribute("IsNull");
             var isNull = (isNullAttribute != null) ? StringToObjectHelper.ToBool(isNullAttribute.Value) : false;
             if (isNull)
+            {
+                return null;
+            }
+
+            // The WCF serialization manner
+            var nilAttribute = element.Attribute("nil");
+            var isNil = (nilAttribute != null) ? StringToObjectHelper.ToBool(nilAttribute.Value) : false;
+            if (isNil)
             {
                 return null;
             }
@@ -537,7 +546,8 @@ namespace Catel.Runtime.Serialization.Xml
                 if (memberValue.Value == null)
                 {
                     xmlWriter.WriteStartElement(elementName);
-                    xmlWriter.WriteAttributeString(namespacePrefix, "IsNull", null, "true");
+                    //xmlWriter.WriteAttributeString(namespacePrefix, "IsNull", null, "true");
+                    xmlWriter.WriteAttributeString(namespacePrefix, "nil", null, "true");
                     xmlWriter.WriteEndElement();
                 }
                 else
@@ -597,7 +607,7 @@ namespace Catel.Runtime.Serialization.Xml
                 }
             }
 
-            EnsureNamespaceInXmlDocument(element, xmlNamespace);
+            EnsureNamespaceInXmlDocument(context, element, xmlNamespace);
 
             var childContent = stringBuilder.ToString();
             var childElement = XElement.Parse(childContent);
@@ -621,34 +631,32 @@ namespace Catel.Runtime.Serialization.Xml
         /// <summary>
         /// Ensures the catel namespace in the xml document.
         /// </summary>
+        /// <param name="context">The context.</param>
         /// <param name="element">The element.</param>
         /// <param name="xmlNamespace">The XML namespace. Can be <c>null</c>.</param>
-        private void EnsureNamespaceInXmlDocument(XElement element, XmlNamespace xmlNamespace)
+        private void EnsureNamespaceInXmlDocument(ISerializationContext context, XElement element, XmlNamespace xmlNamespace)
         {
-            var catelNamespaceUrl = GetNamespaceUrl();
-            string ns1 = element.GetPrefixOfNamespace(catelNamespaceUrl);
-            if (ns1 == null)
+            if (context.Depth == 0)
             {
-                var document = element.Document;
-                if (document != null)
-                {
-                    var documentRoot = document.Root;
-                    if (documentRoot != null)
-                    {
-                        var catelNamespaceName = XNamespace.Xmlns + GetNamespacePrefix();
-                        var catelNamespace = new XAttribute(catelNamespaceName, catelNamespaceUrl);
+                var catelNamespaceUrl = GetNamespaceUrl();
 
-                        documentRoot.Add(catelNamespace);
+                var catelNamespaceName = XNamespace.Xmlns + GetNamespacePrefix();
+                var catelNamespace = new XAttribute(catelNamespaceName, catelNamespaceUrl);
 
-                        if (xmlNamespace != null)
-                        {
-                            var dynamicNamespaceName = XNamespace.Xmlns + xmlNamespace.Prefix;
-                            var dynamicNamespace = new XAttribute(dynamicNamespaceName, xmlNamespace.Uri);
+                element.Add(catelNamespace);
 
-                            documentRoot.Add(dynamicNamespace);
-                        }
-                    }
-                }
+                var xmlSchemaNamespaceName = XNamespace.Xmlns + "i";
+                var xmlSchemaNamespace = new XAttribute(xmlSchemaNamespaceName, "http://www.w3.org/2001/XMLSchema-instance");
+
+                element.Add(xmlSchemaNamespace);
+            }
+
+            if (xmlNamespace != null)
+            {
+                var dynamicNamespaceName = XNamespace.Xmlns + xmlNamespace.Prefix;
+                var dynamicNamespace = new XAttribute(dynamicNamespaceName, xmlNamespace.Uri);
+
+                element.Add(dynamicNamespace);
             }
         }
 
