@@ -11,12 +11,11 @@ namespace Catel.Interception.Handlers
     using Caching;
     using Callbacks;
     using IoC;
-    using Services;
 
     /// <summary>
     /// Represents the handler base implementation.
     /// </summary>
-    public class HandlerBase : ServiceBase
+    public class HandlerBase
     {
         #region Fields
         #endregion
@@ -34,8 +33,8 @@ namespace Catel.Interception.Handlers
         {
             ServiceType = serviceType;
             Tag = tag;
-            TypeFactory = typeFactory ?? IoC.TypeFactory.Default;
-            Container = serviceLocator ?? ServiceLocator.Default;
+            TypeFactory = typeFactory ?? this.GetDependencyResolver().Resolve<ITypeFactory>();
+            Container = serviceLocator ?? this.GetDependencyResolver().Resolve<IServiceLocator>();
             TargetInstanceToUse = targetInstanceToUse;
         }
         #endregion

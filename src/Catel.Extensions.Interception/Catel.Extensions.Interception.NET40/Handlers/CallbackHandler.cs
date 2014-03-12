@@ -14,6 +14,7 @@ namespace Catel.Interception.Handlers
     using Exceptions;
     using Interceptors;
     using IoC;
+    using Logging;
 
     /// <summary>
     /// Implements the <see cref="ICallbackHandler{TService,TServiceImplementation}"/>.
@@ -30,6 +31,11 @@ namespace Catel.Interception.Handlers
         /// The intercetor handler
         /// </summary>
         private readonly InterceptorHandler<TService, TServiceImplementation> _interceptorHandler;
+
+        /// <summary>
+        /// The log
+        /// </summary>
+        private readonly ILog _log;
 
         /// <summary>
         /// The proxy factory
@@ -69,10 +75,12 @@ namespace Catel.Interception.Handlers
         public CallbackHandler(InterceptorHandler<TService, TServiceImplementation> interceptorHandler, IProxyFactory proxyFactory = null, IServiceLocator serviceLocator = null, ITypeFactory typeFactory = null) :
             base(interceptorHandler.ServiceType, interceptorHandler.Tag, serviceLocator, interceptorHandler.TargetInstanceToUse, typeFactory)
         {
-            Argument.IsNotNull(() => interceptorHandler);
+            Argument.IsNotNull("interceptorHandler", interceptorHandler);
+
+            _log = LogManager.GetCurrentClassLogger();
 
             _interceptorHandler = interceptorHandler;
-            _proxyFactory = proxyFactory ?? ProxyFactory.Default;
+            _proxyFactory = proxyFactory ?? this.GetDependencyResolver().Resolve<IProxyFactory>();
 
             _target = TargetInstanceToUse is TService ? (TService) TargetInstanceToUse : TypeFactory.CreateInstance<TServiceImplementation>();
         }
@@ -337,7 +345,12 @@ namespace Catel.Interception.Handlers
 
             lock (InterceptedMembers)
             {
-                InterceptedMembers.ForEach(member => Callbacks[member].Add(callback));
+                InterceptedMembers.ForEach(member =>
+                {
+                    Callbacks[member].Add(callback);
+
+                    _log.Debug("Added the '{0}' for member '{1}'", callback.GetType().Name, member.MemberName);
+                });
 
                 Register();
             }
@@ -370,6 +383,8 @@ namespace Catel.Interception.Handlers
             }
             catch (Exception exception)
             {
+                _log.Debug(exception);
+
                 throw new ProxyInitializationException(
                     string.Format("Unable to create a proxy instance of a '{0}' type: {1}", ServiceType.Name,
                                   exception.Message),
